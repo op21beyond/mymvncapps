@@ -1,0 +1,40 @@
+EnumerateDevices()
+SetGlobalOption()
+GetGlobalOption()
+	-LOGLEVEL
+
+OpenDevice()
+CloseDevice()
+SetDeviceOption()
+GetDeviceOption()
+	-THERMALTHROTTLING_LEVEL
+AllocateGraph()
+
+GetGraphOption()
+SetGraphOption()
+	-DONTBLOCK
+	-TIMETAKEN
+	-DEBUGINFO
+LoadTensor()
+GetResult()
+DeallocateGraph()
+
+Status:
+	OK
+	BUSY
+	ERROR
+	OUT_OF_MEMORY
+	DEVICE_NOT_FOUND
+	INVALID_PARAMETERS
+	TIMEOUT
+	MVCMDNOTFOUND
+	GONE
+	UNSUPPORTEDGRAPHFILE
+	MYRIADERROR	
+
+
+
+
+
+
+
