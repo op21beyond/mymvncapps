@@ -19,10 +19,10 @@ learning_rate = 0.001
 training_epochs = 15
 #training_epochs = 5
 batch_size = 100
-use_batch_normalization = False
+use_batch_normalization = False #
 use_dropout = False
 
-is_training = True
+is_training = False
 
 enable_summary = False
 
@@ -61,7 +61,7 @@ PK = [2, 2,  2,  2] # pooling kernel size
 PS = [2, 2,  2,  2] # pooling strides
 
 with arg_scope([batch_normalization], 
-                 decay=0.999, center=True, scale=True):
+                 decay=0.99, center=True, scale=True):
 
    if enable_summary:
       tf.summary.histogram("X", X)
@@ -176,6 +176,9 @@ if is_training:
       writer.add_graph(sess.graph)
    
    global_step = 0
+else:
+   sess = tf.Session()
+   sess.run(tf.global_variables_initializer())
 
 # Saver and Restore
 saver = tf.train.Saver()
@@ -193,8 +196,7 @@ else:
     print("Could not find old network weights")
 
 if not is_training:
-   sess = tf.Session() 
-   saver.save(sess, CHECK_POINT_DIR + "/tb/mnist_cnn/coverted")
+   saver.save(sess, CHECK_POINT_DIR + "/converted")
    exit()
 
 

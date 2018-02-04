@@ -14,13 +14,15 @@ mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
 # more information about the mnist dataset
 
 # parameters
-#learning_rate = 0.001
-learning_rate = 0.01
-#training_epochs = 15
-training_epochs = 3
+learning_rate = 0.001
+#learning_rate = 0.01
+training_epochs = 15
+#training_epochs = 3
 batch_size = 100
 use_batch_normalization = True
 use_dropout = False
+
+is_training = True
 
 enable_summary = False
 
@@ -28,13 +30,13 @@ n_classes = 10
 n_layers = 5
 w_layers = 512
 
-
 CHECK_POINT_DIR = TB_SUMMARY_DIR = './tb/mnist_dnn'
 
 # input place holders
-#X = tf.placeholder(tf.float32, [None, 784], name='input')
-X = tf.placeholder(tf.float32, [None, 28,28,1], name='input')
-Y = tf.placeholder(tf.float32, [None, 10], name='label')
+if is_training:
+   X = tf.placeholder(tf.float32, [None, 784], name='input')
+else:
+   Y = tf.placeholder(tf.float32, [None, 10], name='label')
 
 # Image input
 if enable_summary:
@@ -42,10 +44,9 @@ if enable_summary:
    #tf.summary.image('in', x_image, 3)
    tf.summary.image('in', X, 3)
 
-XX = tf.reshape(X, [-1, 784],name='input_1d')
-
 # dropout (keep_prob) rate  0.7~0.5 on training, but should be 1 for testing
-keep_prob = tf.placeholder(tf.float32)
+if use_dropout:
+   keep_prob = tf.placeholder(tf.float32)
 
 # weights & bias for nn layers
 # http://stackoverflow.com/questions/33640581/how-to-do-xavier-initialization-on-tensorflow
@@ -56,11 +57,13 @@ w_initializer = tf.contrib.layers.xavier_initializer()
 w_regularizer = tf.contrib.layers.l2_regularizer(0.05)
 
 with arg_scope([batch_normalization], 
-                 decay=0.999, center=True, scale=True):
+                 decay=0.99, center=True, scale=False):
 
    if enable_summary:
       #tf.summary.histogram("X", X)
       tf.summary.histogram("XX", XX)
+
+   L = X
 
    for layer in range(n_layers-1):
       with tf.variable_scope('layer{}'.format(layer)):
@@ -68,11 +71,11 @@ with arg_scope([batch_normalization],
                                regularizer=w_regularizer,
                                initializer=w_initializer)
           if use_batch_normalization:
-             L = tf.matmul(XX if layer==0 else L, W)
+             L = tf.matmul(L, W)
              L = tf.nn.relu(batch_normalization(inputs=L))
           else:
              b = tf.Variable(tf.random_normal([w_layers]))
-             L = tf.nn.relu(tf.matmul(XX if layer==0 else L, W) + b)
+             L = tf.nn.relu(tf.matmul(L, W) + b)
           if use_dropout:
              L = tf.nn.dropout(L, keep_prob=keep_prob)
       
@@ -89,48 +92,52 @@ with arg_scope([batch_normalization],
                                regularizer=w_regularizer,
                                initializer=w_initializer)
        b = tf.Variable(tf.random_normal([n_classes]))
-       hypothesis = tf.matmul(L, W) + b
+       L = tf.matmul(L, W) + b
    
    
        if enable_summary:
           tf.summary.histogram("weights", W)
           tf.summary.histogram("bias", b)
-          tf.summary.histogram("hypothesis", hypothesis)
+          tf.summary.histogram("hypothesis", L)
    
-result = tf.identity(hypothesis,name='result')
+hypothesis = tf.identity(L,name='result')
 
-# define cost/loss & optimizer
-cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
-    logits=hypothesis, labels=Y))
-
-# for Batch Normalization
-if use_batch_normalization:
-   update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-   with tf.control_dependencies(update_ops):
+if is_training:
+   # define cost/loss & optimizer
+   cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
+       logits=hypothesis, labels=Y))
+   
+   # for Batch Normalization
+   if use_batch_normalization:
+      update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+      with tf.control_dependencies(update_ops):
+         optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
+   else:
       optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
+   
+   if enable_summary:
+      tf.summary.scalar("loss", cost)
+   
+   last_epoch = tf.Variable(0, name='last_epoch')
+   
+   # Summary
+   if enable_summary:
+      summary = tf.summary.merge_all()
+   
+   # initialize
+   sess = tf.Session()
+   sess.run(tf.global_variables_initializer())
+   
+   # Create summary writer
+   if enable_summary:
+      writer = tf.summary.FileWriter(TB_SUMMARY_DIR)
+      writer.add_graph(sess.graph)
+   
+   global_step = 0
 else:
-   optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
-
-if enable_summary:
-   tf.summary.scalar("loss", cost)
-
-last_epoch = tf.Variable(0, name='last_epoch')
-
-# Summary
-if enable_summary:
-   summary = tf.summary.merge_all()
-
-# initialize
-sess = tf.Session()
-sess.run(tf.global_variables_initializer())
-
-# Create summary writer
-if enable_summary:
-   writer = tf.summary.FileWriter(TB_SUMMARY_DIR)
-   writer.add_graph(sess.graph)
-
-global_step = 0
-
+   sess = tf.Session()
+   sess.run(tf.global_variables_initializer())
+  
 # Saver and Restore
 saver = tf.train.Saver()
 checkpoint = tf.train.get_checkpoint_state(CHECK_POINT_DIR)
@@ -139,12 +146,16 @@ if checkpoint and checkpoint.model_checkpoint_path:
     try:
         saver.restore(sess, checkpoint.model_checkpoint_path)
         print("Successfully loaded:", checkpoint.model_checkpoint_path)
-        tf.train.export_meta_graph(filename='mnist_dnn.metatext',as_text=True)
+        if is_training:
+           tf.train.export_meta_graph(filename='mnist_dnn.metatext',as_text=True)
     except:
         print("Error on loading old network weights")
 else:
     print("Could not find old network weights")
-#exit()
+
+if not is_training:
+   saver.save(sess, CHECK_POINT_DIR + "/converted")
+   exit()
 
 start_from = sess.run(last_epoch)
 
@@ -159,9 +170,7 @@ for epoch in range(start_from, start_from+training_epochs):
 
     for i in range(total_batch):
         batch_xs, batch_ys = mnist.train.next_batch(batch_size)
-        batch_ximage = np.reshape(batch_xs, [-1, 28, 28, 1])
-        #feed_dict = {X: batch_xs, Y: batch_ys, keep_prob: 0.7}
-        feed_dict = {X: batch_ximage, Y: batch_ys, keep_prob: 0.7}
+        feed_dict = {X: batch_xs, Y: batch_ys, keep_prob: 0.7}
         l, __ = sess.run([cost,optimizer], feed_dict=feed_dict)
         global_step += 1
         avg_cost += l / total_batch
